@@ -8,6 +8,13 @@
   />
 
   <div class="bubble">
+    @if (msg.replyTo) {
+      <div class="reply-quote">
+        <i class="pi pi-reply"></i>
+        <span class="excerpt">{{ msg.replyTo.excerpt }}</span>
+      </div>
+    }
+
     @if (msg.images.length) {
       <div class="images">
         @for (img of msg.images; track img.id) {
@@ -38,4 +45,18 @@
       <span class="cursor">▍</span>
     }
   </div>
+
+  @if (!isUser() && !msg.streaming) {
+    <p-button
+      class="reply-action"
+      icon="pi pi-reply"
+      severity="secondary"
+      [rounded]="true"
+      [text]="true"
+      size="small"
+      pTooltip="Responder"
+      tooltipPosition="top"
+      (onClick)="reply.emit(msg)"
+    />
+  }
 </div>

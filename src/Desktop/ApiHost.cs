@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Azure.AI.OpenAI;
@@ -68,14 +69,17 @@ public static class ApiHost
         app.UseDefaultFiles();
         app.UseStaticFiles();
 
-        // Garante o schema criado.
+        // Garante o schema criado e aplica colunas novas em bancos já existentes.
         using (var scope = app.Services.CreateScope())
         {
-            scope.ServiceProvider.GetRequiredService<ChatDbContext>().Database.EnsureCreated();
+            var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
+            db.Database.EnsureCreated();
+            EnsureReplyColumns(db);
         }
 
         app.MapPost("/api/chat/stream", ChatStreamAsync);
         app.MapPost("/api/images/generate", GenerateImageAsync);
+        app.MapPost("/api/images/edit", EditImageAsync);
         app.MapConversationEndpoints();
         app.MapSettingsEndpoints();
 
@@ -83,6 +87,41 @@ public static class ApiHost
         app.MapFallbackToFile("index.html");
 
         return app;
+    }
+
+    // Adiciona colunas de reply se ainda não existirem (evolução sem migrations).
+    private static void EnsureReplyColumns(ChatDbContext db)
+    {
+        var table = db.Model.FindEntityType(typeof(Data.MessageEntity))?.GetTableName();
+        if (string.IsNullOrEmpty(table))
+        {
+            return;
+        }
+
+        var connection = db.Database.GetDbConnection();
+        connection.Open();
+
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var pragma = connection.CreateCommand())
+        {
+            pragma.CommandText = $"PRAGMA table_info(\"{table}\");";
+            using var reader = pragma.ExecuteReader();
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(1)); // coluna "name"
+            }
+        }
+
+        foreach (var column in new[] { "ReplyToId", "ReplyToRole", "ReplyExcerpt" })
+        {
+            if (existing.Contains(column))
+            {
+                continue;
+            }
+            using var alter = connection.CreateCommand();
+            alter.CommandText = $"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" TEXT NULL;";
+            alter.ExecuteNonQuery();
+        }
     }
 
     private static string GetDbPath()
@@ -132,44 +171,91 @@ public static class ApiHost
         await http.Response.Body.FlushAsync(http.RequestAborted);
     }
 
+    // Quantas imagens (mais recentes) manter no contexto — visão custa muitos tokens.
+    private const int MaxContextImages = 3;
+
+    private const string SystemPrompt =
+        "Você é um assistente prestativo em uma conversa contínua. Use as mensagens e " +
+        "imagens anteriores desta conversa como contexto e mantenha a coerência com o " +
+        "que já foi dito. Quando o usuário citar/responder uma mensagem específica, dê " +
+        "atenção especial a esse ponto.";
+
     private static List<ChatMessage> BuildMessages(ChatRequest request)
     {
-        var messages = new List<ChatMessage>();
+        var input = request.Messages ?? [];
 
-        foreach (var m in request.Messages ?? [])
+        // Só as N imagens mais recentes entram no contexto: descobrimos o índice global
+        // de imagem a partir do qual elas são mantidas.
+        var totalImages = input.Sum(m => m.Images?.Count ?? 0);
+        var keepFromImageIndex = Math.Max(0, totalImages - MaxContextImages);
+
+        var messages = new List<ChatMessage> { new SystemChatMessage(SystemPrompt) };
+        var imageCursor = 0;
+
+        static ChatMessageContentPart ToImagePart(ChatImageDto img)
+        {
+            var bytes = Convert.FromBase64String(img.Base64);
+            return ChatMessageContentPart.CreateImagePart(BinaryData.FromBytes(bytes), img.MediaType);
+        }
+
+        foreach (var m in input)
         {
             var role = m.Role?.ToLowerInvariant();
 
+            // Seleciona só as imagens desta mensagem que estão dentro do orçamento.
+            var keptImages = new List<ChatImageDto>();
+            foreach (var img in m.Images ?? [])
+            {
+                if (imageCursor >= keepFromImageIndex)
+                {
+                    keptImages.Add(img);
+                }
+                imageCursor++;
+            }
+
             if (role == "system")
             {
-                messages.Add(new SystemChatMessage(m.Text ?? ""));
+                if (!string.IsNullOrWhiteSpace(m.Text))
+                {
+                    messages.Add(new SystemChatMessage(m.Text));
+                }
                 continue;
             }
 
             if (role == "assistant")
             {
-                messages.Add(new AssistantChatMessage(m.Text ?? ""));
+                if (!string.IsNullOrWhiteSpace(m.Text))
+                {
+                    messages.Add(new AssistantChatMessage(m.Text));
+                }
+
+                // Imagens geradas pelo assistente: reinjetadas como visão do usuário,
+                // já que a API só aceita imagem em mensagens de usuário.
+                foreach (var img in keptImages)
+                {
+                    messages.Add(new UserChatMessage(
+                        ChatMessageContentPart.CreateTextPart("Imagem gerada anteriormente nesta conversa:"),
+                        ToImagePart(img)));
+                }
+
                 continue;
             }
 
-            // user (pode ter texto + imagens = input de visão)
+            // user: texto + imagens enviadas (dentro do orçamento)
             var parts = new List<ChatMessageContentPart>();
             if (!string.IsNullOrWhiteSpace(m.Text))
             {
                 parts.Add(ChatMessageContentPart.CreateTextPart(m.Text));
             }
-
-            if (m.Images is not null)
+            foreach (var img in keptImages)
             {
-                foreach (var img in m.Images)
-                {
-                    var bytes = Convert.FromBase64String(img.Base64);
-                    parts.Add(ChatMessageContentPart.CreateImagePart(
-                        BinaryData.FromBytes(bytes), img.MediaType));
-                }
+                parts.Add(ToImagePart(img));
             }
 
-            messages.Add(new UserChatMessage(parts));
+            if (parts.Count > 0)
+            {
+                messages.Add(new UserChatMessage(parts));
+            }
         }
 
         return messages;
@@ -219,6 +305,53 @@ public static class ApiHost
 
         return Results.Json(new { b64 }, Json);
     }
+
+    // ---- Edição de imagem (image-to-image via images/edits) ----
+    private static async Task<IResult> EditImageAsync(
+        ImageEditRequest request,
+        IHttpClientFactory httpFactory,
+        SettingsStore settings)
+    {
+        var cfg = settings.Current.Images;
+        if (string.IsNullOrWhiteSpace(cfg.Endpoint) || string.IsNullOrWhiteSpace(cfg.ApiKey))
+        {
+            return Results.Problem(detail: "Configure as chaves de imagem da Azure OpenAI.", statusCode: StatusCodes.Status409Conflict);
+        }
+
+        var endpoint = cfg.Endpoint.TrimEnd('/');
+        // O endpoint de edição exige uma api-version mais nova que a de geração.
+        const string editApiVersion = "2025-04-01-preview";
+        var url = $"{endpoint}/openai/deployments/{cfg.DeploymentName}/images/edits?api-version={editApiVersion}";
+
+        var size = string.IsNullOrWhiteSpace(request.Size) ? "1024x1024" : request.Size;
+        var imageBytes = Convert.FromBase64String(request.Base64);
+
+        using var form = new MultipartFormDataContent();
+        var imageContent = new ByteArrayContent(imageBytes);
+        imageContent.Headers.ContentType = new MediaTypeHeaderValue(
+            string.IsNullOrWhiteSpace(request.MediaType) ? "image/png" : request.MediaType);
+        form.Add(imageContent, "image", "image.png");
+        form.Add(new StringContent(request.Prompt), "prompt");
+        form.Add(new StringContent(size), "size");
+        form.Add(new StringContent("1"), "n");
+
+        using var client = httpFactory.CreateClient();
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url) { Content = form };
+        httpRequest.Headers.Add("api-key", cfg.ApiKey);
+
+        using var response = await client.SendAsync(httpRequest);
+        var payload = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return Results.Problem(detail: payload, statusCode: (int)response.StatusCode);
+        }
+
+        using var doc = JsonDocument.Parse(payload);
+        var b64 = doc.RootElement.GetProperty("data")[0].GetProperty("b64_json").GetString();
+
+        return Results.Json(new { b64 }, Json);
+    }
 }
 
 // ---- Contratos (JSON vindo do Angular) ----
@@ -226,3 +359,4 @@ public sealed record ChatRequest(List<ChatMessageDto> Messages);
 public sealed record ChatMessageDto(string Role, string? Text, List<ChatImageDto>? Images);
 public sealed record ChatImageDto(string MediaType, string Base64);
 public sealed record ImageRequest(string Prompt, string? Size);
+public sealed record ImageEditRequest(string Prompt, string Base64, string? MediaType, string? Size);

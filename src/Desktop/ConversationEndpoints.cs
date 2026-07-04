@@ -79,6 +79,9 @@ public static class ConversationEndpoints
                 Role = body.Role,
                 Text = body.Text ?? "",
                 CreatedAt = body.CreatedAt,
+                ReplyToId = body.ReplyToId,
+                ReplyToRole = body.ReplyToRole,
+                ReplyExcerpt = body.ReplyExcerpt,
                 Images = (body.Images ?? []).Select(i => new ImageEntity
                 {
                     Id = i.Id,
@@ -111,15 +114,17 @@ public static class ConversationEndpoints
                 m.Role,
                 m.Text,
                 m.CreatedAt,
-                m.Images.Select(i => new ImageDto(i.Id, i.MediaType, i.Base64)).ToList()))
+                m.Images.Select(i => new ImageDto(i.Id, i.MediaType, i.Base64)).ToList(),
+                m.ReplyToId is null ? null : new ReplyDto(m.ReplyToId, m.ReplyToRole ?? "", m.ReplyExcerpt ?? "")))
             .ToList());
 }
 
 // ---- Contratos ----
 public sealed record ConversationSummaryDto(string Id, string Title, long CreatedAt);
 public sealed record ConversationDto(string Id, string Title, long CreatedAt, List<MessageDto> Messages);
-public sealed record MessageDto(string Id, string Role, string Text, long CreatedAt, List<ImageDto> Images);
+public sealed record MessageDto(string Id, string Role, string Text, long CreatedAt, List<ImageDto> Images, ReplyDto? ReplyTo);
 public sealed record ImageDto(string Id, string MediaType, string Base64);
+public sealed record ReplyDto(string Id, string Role, string Excerpt);
 public sealed record CreateConversationRequest(string? Id, string? Title, long? CreatedAt);
 public sealed record UpdateTitleRequest(string Title);
-public sealed record AddMessageRequest(string Id, string Role, string? Text, long CreatedAt, List<ImageDto>? Images);
+public sealed record AddMessageRequest(string Id, string Role, string? Text, long CreatedAt, List<ImageDto>? Images, string? ReplyToId, string? ReplyToRole, string? ReplyExcerpt);

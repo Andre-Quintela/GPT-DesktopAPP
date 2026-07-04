@@ -5,6 +5,7 @@ import {
   effect,
   ElementRef,
   input,
+  output,
   viewChild
 } from '@angular/core';
 import { MessageBubble } from '../message-bubble/message-bubble';
@@ -22,6 +23,9 @@ import { ChatMessage } from '../models/chat.models';
 })
 export class MessageList implements AfterViewInit {
   readonly messages = input.required<ChatMessage[]>();
+
+  /** Repassa o pedido de responder (citar) uma mensagem. */
+  readonly reply = output<ChatMessage>();
 
   private readonly scroller = viewChild.required<ElementRef<HTMLDivElement>>('scroller');
 

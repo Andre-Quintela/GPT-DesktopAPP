@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { environment } from '../../../environments/environment';
-import { ChatImage, ChatMessage, Conversation } from '../models/chat.models';
+import { ChatImage, ChatMessage, Conversation, ReplyRef } from '../models/chat.models';
 
 interface ConversationSummaryDto {
   id: string;
@@ -14,6 +14,7 @@ interface MessageDto {
   text: string;
   createdAt: number;
   images: ChatImage[];
+  replyTo?: ReplyRef;
 }
 
 interface ConversationDto extends ConversationSummaryDto {
@@ -61,7 +62,10 @@ export class ConversationApiService {
       role: message.role,
       text: message.text,
       createdAt: message.createdAt,
-      images: message.images
+      images: message.images,
+      replyToId: message.replyTo?.id ?? null,
+      replyToRole: message.replyTo?.role ?? null,
+      replyExcerpt: message.replyTo?.excerpt ?? null
     });
   }
 

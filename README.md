@@ -51,3 +51,6 @@ A janela nativa deve abrir exibindo a tela **Hello World** com um card e botão 
 - Servir o build estático do Angular embutido no executável para produção.
 - Ponte de comunicação JS ↔ .NET (Photino messaging).
 - Empacotamento / instalador.
+
+
+git tag v0.1.0 && git push --tags

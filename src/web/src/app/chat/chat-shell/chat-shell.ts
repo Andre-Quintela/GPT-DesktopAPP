@@ -4,7 +4,7 @@ import { ConversationSidebar } from '../conversation-sidebar/conversation-sideba
 import { MessageComposer } from '../message-composer/message-composer';
 import { MessageList } from '../message-list/message-list';
 import { SettingsDialog } from '../settings-dialog/settings-dialog';
-import { ComposerSubmit } from '../models/chat.models';
+import { ChatMessage, ComposerSubmit, makeExcerpt, ReplyRef } from '../models/chat.models';
 import { ConversationStore } from '../services/conversation-store';
 import { SettingsService } from '../../core/settings.service';
 
@@ -27,6 +27,7 @@ export class ChatShell implements OnInit {
   readonly configured = this.settings.configured;
 
   readonly settingsVisible = signal(false);
+  readonly replyTarget = signal<ReplyRef | undefined>(undefined);
 
   async ngOnInit(): Promise<void> {
     try {
@@ -44,7 +45,18 @@ export class ChatShell implements OnInit {
     this.settingsVisible.set(true);
   }
 
+  onReply(message: ChatMessage): void {
+    const hasImage = message.images.length > 0;
+    const excerpt = message.text.trim() ? makeExcerpt(message.text) : hasImage ? '🖼️ imagem' : '';
+    this.replyTarget.set({ id: message.id, role: message.role, excerpt, hasImage });
+  }
+
+  cancelReply(): void {
+    this.replyTarget.set(undefined);
+  }
+
   onSubmit(payload: ComposerSubmit): void {
     void this.store.submit(payload);
+    this.replyTarget.set(undefined);
   }
 }

@@ -17,6 +17,16 @@ public sealed class MainForm : Form
         Height = 800;
         StartPosition = FormStartPosition.CenterScreen;
 
+        // Ícone da janela/taskbar = ícone embutido no próprio executável.
+        try
+        {
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+        }
+        catch
+        {
+            // ambiente sem ícone associado — mantém o padrão
+        }
+
         _webView = new WebView2 { Dock = DockStyle.Fill };
         Controls.Add(_webView);
 

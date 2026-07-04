@@ -8,7 +8,7 @@
     }
 
     @for (msg of messages(); track msg.id) {
-      <app-message-bubble [message]="msg" />
+      <app-message-bubble [message]="msg" (reply)="reply.emit($event)" />
     }
   </div>
 </div>

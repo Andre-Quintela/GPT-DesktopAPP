@@ -88,6 +88,27 @@ export class ChatApiService {
     const data = (await response.json()) as { b64: string };
     return data.b64;
   }
+
+  /** Edita uma imagem existente (image-to-image); retorna o base64 (png). */
+  async editImage(
+    prompt: string,
+    base64: string,
+    mediaType: string,
+    size = '1024x1024'
+  ): Promise<string> {
+    const response = await fetch(`${this.baseUrl}/api/images/edit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, base64, mediaType, size })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Falha na edição de imagem (${response.status})`);
+    }
+
+    const data = (await response.json()) as { b64: string };
+    return data.b64;
+  }
 }
 
 function toApiMessage(m: ChatMessage): ChatApiMessage {

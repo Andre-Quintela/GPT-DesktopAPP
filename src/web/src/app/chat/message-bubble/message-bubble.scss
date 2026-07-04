@@ -17,6 +17,40 @@
       border-radius: 1rem 1rem 0.25rem 1rem;
     }
   }
+
+  // Botão "Responder" aparece ao passar o mouse na linha.
+  .reply-action {
+    align-self: center;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  &:hover .reply-action {
+    opacity: 1;
+  }
+}
+
+.reply-quote {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  border-left: 3px solid var(--p-primary-color);
+  background: var(--p-highlight-background, rgba(127, 127, 127, 0.12));
+  border-radius: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--p-text-muted-color);
+
+  .excerpt {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  i {
+    flex: 0 0 auto;
+  }
 }
 
 .bubble {

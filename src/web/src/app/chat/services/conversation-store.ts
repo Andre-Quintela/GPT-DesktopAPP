@@ -6,8 +6,12 @@ import {
   ChatMessage,
   ComposerSubmit,
   Conversation,
-  newId
+  newId,
+  ReplyRef
 } from '../models/chat.models';
+
+/** Nº máximo de mensagens recentes enviadas como contexto (≈10 turnos). */
+const CONTEXT_WINDOW = 20;
 
 /**
  * Estado das conversas e orquestração do envio de mensagens.
@@ -74,7 +78,10 @@ export class ConversationStore {
         role: m.role as ChatMessage['role'],
         text: m.text,
         images: m.images ?? [],
-        createdAt: m.createdAt
+        createdAt: m.createdAt,
+        replyTo: m.replyTo
+          ? { id: m.replyTo.id, role: m.replyTo.role as ChatMessage['role'], excerpt: m.replyTo.excerpt }
+          : undefined
       }));
       this._conversations.update((list) =>
         list.map((c) => (c.id === id ? { ...c, messages, loaded: true } : c))
@@ -133,14 +140,15 @@ export class ConversationStore {
       role: 'user',
       text: payload.text,
       images: payload.images,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      replyTo: payload.replyTo
     };
     this.appendMessage(conversation.id, userMessage);
     this.persist(this.persistence.addMessage(conversation.id, userMessage));
     this.maybeSetTitle(conversation.id, payload.text);
 
     if (payload.mode === 'image') {
-      await this.runImage(conversation.id, payload.text);
+      await this.runImage(conversation.id, userMessage.id, payload.text, payload.replyTo);
     } else {
       await this.runChat(conversation.id);
     }
@@ -160,10 +168,8 @@ export class ConversationStore {
     this._sending.set(true);
 
     try {
-      const history = this.conversationById(conversationId)?.messages.filter(
-        (m) => m.id !== assistant.id
-      );
-      await this.api.streamChat(history ?? [], (token) => {
+      const history = this.buildContext(conversationId, assistant.id);
+      await this.api.streamChat(history, (token) => {
         this.updateMessage(conversationId, assistant.id, (m) => ({
           ...m,
           text: m.text + token
@@ -180,7 +186,12 @@ export class ConversationStore {
   }
 
   // ---- Geração de imagem ----
-  private async runImage(conversationId: string, prompt: string): Promise<void> {
+  private async runImage(
+    conversationId: string,
+    userMessageId: string,
+    instruction: string,
+    replyTo?: ReplyRef
+  ): Promise<void> {
     const assistant: ChatMessage = {
       id: newId(),
       role: 'assistant',
@@ -193,7 +204,15 @@ export class ConversationStore {
     this._sending.set(true);
 
     try {
-      const b64 = await this.api.generateImage(prompt);
+      // Reply a uma imagem → edição (image-to-image) preservando a original.
+      const source = replyTo ? this.imageOf(conversationId, replyTo.id) : undefined;
+      let b64: string;
+      if (source) {
+        b64 = await this.api.editImage(instruction, source.base64, source.mediaType);
+      } else {
+        const prompt = this.buildImagePrompt(conversationId, userMessageId, instruction, replyTo);
+        b64 = await this.api.generateImage(prompt);
+      }
       const image: ChatImage = { id: newId(), mediaType: 'image/png', base64: b64 };
       this.updateMessage(conversationId, assistant.id, (m) => ({
         ...m,
@@ -220,6 +239,78 @@ export class ConversationStore {
     if (finalMessage) {
       this.persist(this.persistence.addMessage(conversationId, finalMessage));
     }
+  }
+
+  /** Retorna a primeira imagem de uma mensagem (para edição via reply). */
+  private imageOf(conversationId: string, messageId: string): ChatImage | undefined {
+    const msg = this.conversationById(conversationId)?.messages.find((m) => m.id === messageId);
+    return msg?.images[0];
+  }
+
+  /**
+   * Compõe o prompt de geração de imagem. Como o endpoint é texto→imagem (não recebe
+   * a imagem anterior), reaproveitamos o prompt base — o texto que originou a imagem
+   * citada (reply) ou a última imagem gerada na conversa — e aplicamos a nova instrução.
+   */
+  private buildImagePrompt(
+    conversationId: string,
+    userMessageId: string,
+    instruction: string,
+    replyTo?: ReplyRef
+  ): string {
+    const msgs = this.conversationById(conversationId)?.messages ?? [];
+
+    // Ponto de partida: a mensagem citada (imagem), ou a mensagem atual do usuário.
+    const anchorId = replyTo?.id ?? userMessageId;
+    const anchorIdx = msgs.findIndex((m) => m.id === anchorId);
+    const searchFrom = anchorIdx >= 0 ? anchorIdx : msgs.length - 1;
+
+    // Prompt base = o texto de usuário anterior mais próximo (o que originou a imagem).
+    let base = '';
+    for (let i = searchFrom; i >= 0; i--) {
+      const m = msgs[i];
+      if (m.id === userMessageId) {
+        continue; // ignora a instrução atual
+      }
+      if (m.role === 'user' && m.text.trim()) {
+        base = m.text.trim();
+        break;
+      }
+    }
+
+    return base ? `${base}. ${instruction}` : instruction;
+  }
+
+  /**
+   * Monta o contexto enviado ao modelo: janela recente + "pin" das mensagens citadas
+   * (reply) que ficaram fora da janela, e prefixa citação no texto de quem deu reply.
+   */
+  private buildContext(conversationId: string, excludeId: string): ChatMessage[] {
+    const all = (this.conversationById(conversationId)?.messages ?? []).filter(
+      (m) => m.id !== excludeId
+    );
+
+    let history = all.slice(-CONTEXT_WINDOW);
+    const included = new Set(history.map((m) => m.id));
+
+    // Traz mensagens citadas que ficaram fora da janela.
+    for (const m of [...history]) {
+      const ref = m.replyTo;
+      if (ref && !included.has(ref.id)) {
+        const target = all.find((x) => x.id === ref.id);
+        if (target) {
+          history = [target, ...history];
+          included.add(target.id);
+        }
+      }
+    }
+
+    // Reforça o ponto citado no texto enviado ao modelo (UI mantém o texto limpo).
+    return history.map((m) =>
+      m.replyTo
+        ? { ...m, text: `> (respondendo a) ${m.replyTo.excerpt}\n\n${m.text}` }
+        : m
+    );
   }
 
   // ---- Helpers de estado ----

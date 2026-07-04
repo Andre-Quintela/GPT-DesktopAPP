@@ -7,6 +7,15 @@ export interface ChatImage {
   base64: string;
 }
 
+/** Referência a uma mensagem citada (reply). */
+export interface ReplyRef {
+  id: string;
+  role: ChatRole;
+  excerpt: string;
+  /** true quando a mensagem citada contém imagem (habilita edição/modo imagem). */
+  hasImage?: boolean;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
@@ -15,6 +24,8 @@ export interface ChatMessage {
   /** true enquanto a resposta está sendo recebida em streaming. */
   streaming?: boolean;
   createdAt: number;
+  /** Mensagem anterior citada por esta (reply). */
+  replyTo?: ReplyRef;
 }
 
 export interface Conversation {
@@ -33,6 +44,13 @@ export interface ComposerSubmit {
   text: string;
   images: ChatImage[];
   mode: ComposerMode;
+  replyTo?: ReplyRef;
+}
+
+/** Recorte curto do texto de uma mensagem para citação. */
+export function makeExcerpt(text: string, max = 120): string {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  return clean.length > max ? clean.slice(0, max) + '…' : clean;
 }
 
 /** Helper para gerar ids curtos e únicos. */

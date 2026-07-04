@@ -3,7 +3,7 @@
 
   <main class="main">
     <app-chat-header (openSettings)="openSettings()" />
-    <app-message-list class="list-slot" [messages]="messages()" />
+    <app-message-list class="list-slot" [messages]="messages()" (reply)="onReply($event)" />
 
     @if (!configured()) {
       <div class="config-warning">
@@ -15,7 +15,9 @@
 
     <app-message-composer
       [disabled]="sending() || !configured()"
+      [replyTo]="replyTarget()"
       (submit)="onSubmit($event)"
+      (cancelReply)="cancelReply()"
     />
   </main>
 </div>

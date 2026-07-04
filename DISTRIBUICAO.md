@@ -41,7 +41,7 @@ dotnet publish src/Desktop/Desktop.csproj -c Release -r win-x64 --self-contained
 
 # 3) empacotar
 dotnet tool install -g vpk
-vpk pack --packId GPT-APP --packVersion 0.1.0 --packDir publish --mainExe Desktop.exe --packTitle "GPT-APP"
+vpk pack --packId GPT-APP --packVersion 0.1.0 --packDir publish --mainExe Desktop.exe --packTitle "GPT-APP" --icon src/Desktop/app.ico
 # → gera Releases/GPT-APP-win-Setup.exe
 ```
 

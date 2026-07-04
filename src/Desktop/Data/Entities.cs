@@ -19,6 +19,11 @@ public sealed class MessageEntity
     public string Text { get; set; } = "";
     public long CreatedAt { get; set; }
 
+    // Reply: referência a uma mensagem anterior citada por esta.
+    public string? ReplyToId { get; set; }
+    public string? ReplyToRole { get; set; }
+    public string? ReplyExcerpt { get; set; }
+
     public List<ImageEntity> Images { get; set; } = [];
 }
 

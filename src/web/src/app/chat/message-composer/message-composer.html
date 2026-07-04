@@ -1,4 +1,19 @@
 <div class="composer">
+  @if (replyTo(); as ref) {
+    <div class="reply-banner">
+      <i class="pi pi-reply"></i>
+      <span class="excerpt">Respondendo: {{ ref.excerpt }}</span>
+      <p-button
+        icon="pi pi-times"
+        severity="secondary"
+        [text]="true"
+        [rounded]="true"
+        size="small"
+        (onClick)="cancelReply.emit()"
+      />
+    </div>
+  }
+
   @if (images().length) {
     <div class="previews">
       @for (img of images(); track img.id) {

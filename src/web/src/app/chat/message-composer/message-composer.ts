@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  effect,
   ElementRef,
   input,
   output,
@@ -17,7 +18,8 @@ import {
   ComposerMode,
   ComposerSubmit,
   dataUrlToImage,
-  imageToDataUrl
+  imageToDataUrl,
+  ReplyRef
 } from '../models/chat.models';
 
 /**
@@ -34,13 +36,27 @@ export class MessageComposer {
   /** Desabilita o envio enquanto uma resposta está em andamento. */
   readonly disabled = input(false);
 
+  /** Mensagem sendo citada (reply), ou undefined. */
+  readonly replyTo = input<ReplyRef>();
+
   readonly submit = output<ComposerSubmit>();
+  /** Solicita cancelar a citação atual. */
+  readonly cancelReply = output<void>();
 
   protected readonly text = signal('');
   protected readonly images = signal<ChatImage[]>([]);
   protected readonly imageMode = signal(false);
 
   private readonly fileInput = viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
+
+  constructor() {
+    // Reply de uma imagem → liga o modo imagem automaticamente (edição).
+    effect(() => {
+      if (this.replyTo()?.hasImage) {
+        this.imageMode.set(true);
+      }
+    });
+  }
 
   protected previewSrc(image: ChatImage): string {
     return imageToDataUrl(image);
@@ -85,7 +101,7 @@ export class MessageComposer {
       return; // nada para enviar
     }
 
-    this.submit.emit({ text, images, mode });
+    this.submit.emit({ text, images, mode, replyTo: this.replyTo() });
     this.text.set('');
     this.images.set([]);
   }
