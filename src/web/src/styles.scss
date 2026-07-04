@@ -1,6 +1,84 @@
 /* Estilos globais */
 @import "primeicons/primeicons.css";
 
+/* Syntax highlighting (tema próprio via CSS variables — claro/escuro).
+   Paleta inspirada no GitHub. */
+:root {
+  --hljs-fg: #24292e;
+  --hljs-comment: #6a737d;
+  --hljs-keyword: #d73a49;
+  --hljs-string: #032f62;
+  --hljs-number: #005cc5;
+  --hljs-title: #6f42c1;
+  --hljs-attr: #005cc5;
+  --hljs-type: #e36209;
+  --hljs-tag: #22863a;
+}
+.app-dark {
+  --hljs-fg: #c9d1d9;
+  --hljs-comment: #8b949e;
+  --hljs-keyword: #ff7b72;
+  --hljs-string: #a5d6ff;
+  --hljs-number: #79c0ff;
+  --hljs-title: #d2a8ff;
+  --hljs-attr: #79c0ff;
+  --hljs-type: #ffa657;
+  --hljs-tag: #7ee787;
+}
+
+.hljs {
+  color: var(--hljs-fg);
+  background: transparent;
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--hljs-comment);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-literal {
+  color: var(--hljs-keyword);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+  color: var(--hljs-string);
+}
+.hljs-number {
+  color: var(--hljs-number);
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section,
+.hljs-symbol {
+  color: var(--hljs-title);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable {
+  color: var(--hljs-attr);
+}
+.hljs-type,
+.hljs-title.class_,
+.hljs-class .hljs-title,
+.hljs-params {
+  color: var(--hljs-type);
+}
+.hljs-tag,
+.hljs-name,
+.hljs-meta {
+  color: var(--hljs-tag);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}
+
 html,
 body {
   height: 100%;

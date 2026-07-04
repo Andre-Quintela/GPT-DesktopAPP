@@ -20,7 +20,15 @@
       @if (isUser()) {
         <div class="text user-text">{{ msg.text }}</div>
       } @else {
-        <div class="text markdown" [innerHTML]="msg.text | markdown"></div>
+        <div class="text markdown">
+          @for (seg of segments(); track $index) {
+            @if (seg.kind === 'html') {
+              <div [innerHTML]="seg.html"></div>
+            } @else {
+              <app-code-block [code]="seg.code" [language]="seg.lang" />
+            }
+          }
+        </div>
       }
     }
 

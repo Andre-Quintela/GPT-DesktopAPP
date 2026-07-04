@@ -1,0 +1,14 @@
+<div class="code-block">
+  <div class="code-header">
+    <span class="lang">{{ label() }}</span>
+    <p-button
+      [label]="copied() ? 'Copiado!' : 'Copiar'"
+      [icon]="copied() ? 'pi pi-check' : 'pi pi-copy'"
+      severity="secondary"
+      size="small"
+      [text]="true"
+      (onClick)="copy()"
+    />
+  </div>
+  <pre class="hljs"><code [innerHTML]="highlighted()"></code></pre>
+</div>

@@ -1,0 +1,42 @@
+:host {
+  display: block;
+  margin: 0.75rem 0;
+}
+
+.code-block {
+  border: 1px solid var(--p-content-border-color);
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background: var(--p-highlight-background, rgba(127, 127, 127, 0.08));
+}
+
+.code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.15rem 0.35rem 0.15rem 0.75rem;
+  border-bottom: 1px solid var(--p-content-border-color);
+  background: rgba(127, 127, 127, 0.1);
+
+  .lang {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--p-text-muted-color);
+    font-family: "Cascadia Code", Consolas, monospace;
+  }
+}
+
+pre {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+
+  code {
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    background: transparent;
+    padding: 0;
+  }
+}
