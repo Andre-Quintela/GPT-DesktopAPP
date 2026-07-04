@@ -47,14 +47,17 @@ internal static class Program
 
         using var form = new MainForm(AppUrl);
 
-        // Ao fechar a janela, derruba o ng serve e para a API.
-        form.FormClosed += (_, _) =>
-        {
-            StopProcessTree(angularProcess);
-            api.StopAsync().GetAwaiter().GetResult();
-        };
+        // Ao fechar a janela, derruba apenas o ng serve (rápido, não bloqueia a UI).
+        form.FormClosed += (_, _) => StopProcessTree(angularProcess);
 
         Application.Run(form);
+
+        // O loop da janela terminou. Descarta o WebView2 (fecha seus processos filhos)
+        // e encerra o processo imediatamente — isso derruba o Kestrel sem travar.
+        // NÃO usar api.StopAsync().GetResult() na thread de UI: o WebView2 ainda segura
+        // conexões com o Kestrel e, na mesma thread bloqueada, causa deadlock (trava).
+        form.Dispose();
+        Environment.Exit(0);
     }
 
     private static bool IsServerUp(string url)
