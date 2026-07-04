@@ -2,8 +2,22 @@
   <app-conversation-sidebar class="sidebar-slot" />
 
   <main class="main">
-    <app-chat-header />
+    <app-chat-header (openSettings)="openSettings()" />
     <app-message-list class="list-slot" [messages]="messages()" />
-    <app-message-composer [disabled]="sending()" (submit)="onSubmit($event)" />
+
+    @if (!configured()) {
+      <div class="config-warning">
+        <i class="pi pi-exclamation-triangle"></i>
+        <span>Configure suas chaves da Azure OpenAI para começar.</span>
+        <button type="button" (click)="openSettings()">Abrir configurações</button>
+      </div>
+    }
+
+    <app-message-composer
+      [disabled]="sending() || !configured()"
+      (submit)="onSubmit($event)"
+    />
   </main>
 </div>
+
+<app-settings-dialog [(visible)]="settingsVisible" />

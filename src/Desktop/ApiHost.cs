@@ -27,13 +27,19 @@ public static class ApiHost
 
     public static WebApplication Build()
     {
-        var builder = WebApplication.CreateBuilder();
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            ContentRootPath = AppContext.BaseDirectory
+        });
 
         // Carrega config a partir do diretório do executável (appsettings*.json).
         builder.Configuration
             .SetBasePath(AppContext.BaseDirectory)
             .AddJsonFile("appsettings.json", optional: true)
+#if DEBUG
+            // Chaves de desenvolvimento (nunca vão para o build de distribuição).
             .AddJsonFile("appsettings.Development.json", optional: true)
+#endif
             .AddUserSecrets(typeof(ApiHost).Assembly, optional: true)
             .AddEnvironmentVariables();
 
@@ -47,6 +53,9 @@ public static class ApiHost
 
         builder.Services.AddHttpClient();
 
+        // Configuração de chaves informada pelo usuário (%APPDATA%/GPT-APP/settings.json).
+        builder.Services.AddSingleton<SettingsStore>();
+
         // Persistência (SQLite em %APPDATA%/GPT-APP/gpt-app.db).
         builder.Services.AddDbContext<ChatDbContext>(o => o.UseSqlite($"Data Source={GetDbPath()}"));
 
@@ -54,6 +63,10 @@ public static class ApiHost
 
         var app = builder.Build();
         app.UseCors(CorsPolicy);
+
+        // Serve o build estático do Angular (produção): wwwroot + fallback SPA.
+        app.UseDefaultFiles();
+        app.UseStaticFiles();
 
         // Garante o schema criado.
         using (var scope = app.Services.CreateScope())
@@ -64,6 +77,10 @@ public static class ApiHost
         app.MapPost("/api/chat/stream", ChatStreamAsync);
         app.MapPost("/api/images/generate", GenerateImageAsync);
         app.MapConversationEndpoints();
+        app.MapSettingsEndpoints();
+
+        // SPA fallback (rotas do Angular que não são /api/*).
+        app.MapFallbackToFile("index.html");
 
         return app;
     }
@@ -78,9 +95,16 @@ public static class ApiHost
 
     // ---- Chat com streaming (SSE) ----
     private static async Task ChatStreamAsync(
-        HttpContext http, ChatRequest request, Microsoft.Extensions.Options.IOptions<OpenAiOptions> options)
+        HttpContext http, ChatRequest request, SettingsStore settings)
     {
-        var cfg = options.Value.Chat;
+        if (!settings.IsConfigured)
+        {
+            http.Response.StatusCode = StatusCodes.Status409Conflict;
+            await http.Response.WriteAsync("Configure suas chaves da Azure OpenAI.");
+            return;
+        }
+
+        var cfg = settings.Current.Chat;
         var azure = new AzureOpenAIClient(new Uri(cfg.Endpoint), new ApiKeyCredential(cfg.ApiKey));
         var chatClient = azure.GetChatClient(cfg.DeploymentName);
 
@@ -155,9 +179,14 @@ public static class ApiHost
     private static async Task<IResult> GenerateImageAsync(
         ImageRequest request,
         IHttpClientFactory httpFactory,
-        Microsoft.Extensions.Options.IOptions<OpenAiOptions> options)
+        SettingsStore settings)
     {
-        var cfg = options.Value.Images;
+        var cfg = settings.Current.Images;
+        if (string.IsNullOrWhiteSpace(cfg.Endpoint) || string.IsNullOrWhiteSpace(cfg.ApiKey))
+        {
+            return Results.Problem(detail: "Configure as chaves de imagem da Azure OpenAI.", statusCode: StatusCodes.Status409Conflict);
+        }
+
         var endpoint = cfg.Endpoint.TrimEnd('/');
         var url = $"{endpoint}/openai/deployments/{cfg.DeploymentName}/images/generations?api-version={cfg.ApiVersion}";
 

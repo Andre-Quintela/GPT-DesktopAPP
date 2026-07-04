@@ -1,3 +1,4 @@
+using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
 namespace Desktop;
@@ -23,7 +24,12 @@ public sealed class MainForm : Form
         // então os awaits abaixo continuam na mesma thread — requisito do WebView2.
         Load += async (_, _) =>
         {
-            await _webView.EnsureCoreWebView2Async();
+            // Usa uma pasta de dados gravável (o app pode ser instalado em local read-only).
+            var userDataFolder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "GPT-APP", "WebView2");
+            var env = await CoreWebView2Environment.CreateAsync(userDataFolder: userDataFolder);
+            await _webView.EnsureCoreWebView2Async(env);
 #if DEBUG
             await WaitForServerAsync(url);
 #endif

@@ -11,6 +11,11 @@ node_modules/
 dist/
 .angular/
 
+# Build/publish de distribuição
+publish/
+src/Desktop/wwwroot/
+Releases/
+
 # IDE
 .vs/
 .vscode/*

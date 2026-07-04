@@ -1,0 +1,57 @@
+<p-dialog
+  header="Configurações"
+  [(visible)]="visible"
+  [modal]="true"
+  [style]="{ width: '34rem' }"
+  [draggable]="false"
+>
+  @let f = form();
+
+  <p class="hint">
+    Informe suas credenciais da <strong>Azure OpenAI</strong>. Elas ficam salvas apenas
+    no seu computador.
+  </p>
+
+  <fieldset class="group">
+    <legend>Chat</legend>
+    <label>
+      Endpoint
+      <input pInputText [ngModel]="f.chat.endpoint" (ngModelChange)="patchChat('endpoint', $event)"
+        placeholder="https://seu-recurso.cognitiveservices.azure.com/" />
+    </label>
+    <label>
+      Deployment
+      <input pInputText [ngModel]="f.chat.deploymentName" (ngModelChange)="patchChat('deploymentName', $event)"
+        placeholder="gpt-5.4" />
+    </label>
+    <label>
+      API Key
+      <p-password [ngModel]="f.chat.apiKey" (ngModelChange)="patchChat('apiKey', $event)"
+        [feedback]="false" [toggleMask]="true" fluid />
+    </label>
+  </fieldset>
+
+  <fieldset class="group">
+    <legend>Imagens (opcional)</legend>
+    <label>
+      Endpoint
+      <input pInputText [ngModel]="f.images.endpoint" (ngModelChange)="patchImages('endpoint', $event)"
+        placeholder="https://seu-recurso.cognitiveservices.azure.com/" />
+    </label>
+    <label>
+      Deployment
+      <input pInputText [ngModel]="f.images.deploymentName" (ngModelChange)="patchImages('deploymentName', $event)"
+        placeholder="gpt-image-2" />
+    </label>
+    <label>
+      API Key
+      <p-password [ngModel]="f.images.apiKey" (ngModelChange)="patchImages('apiKey', $event)"
+        [feedback]="false" [toggleMask]="true" fluid />
+    </label>
+  </fieldset>
+
+  <div class="footer">
+    <p-button label="Cancelar" severity="secondary" [text]="true" (onClick)="visible.set(false)" />
+    <p-button label="Salvar" icon="pi pi-check" [loading]="saving()" (onClick)="save()" />
+  </div>
+</p-dialog>

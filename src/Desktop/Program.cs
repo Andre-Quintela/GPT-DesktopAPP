@@ -2,14 +2,19 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Hosting;
+using Velopack;
 
 namespace Desktop;
 
 internal static class Program
 {
+#if DEBUG
     // Em desenvolvimento a UI é servida pelo dev server do Angular (ng serve).
-    // Em produção (etapa futura) será servida a partir do build estático.
     private const string AppUrl = "http://localhost:4200";
+#else
+    // Em produção a UI é servida como build estático pelo próprio Kestrel.
+    private const string AppUrl = ApiHost.BaseUrl;
+#endif
 
     // Main precisa ser síncrono e STA: o WebView2 exige que o message loop
     // (Application.Run) rode na thread STA. Um `async Task Main` faria a
@@ -17,6 +22,9 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        // Trata os hooks de instalação/atualização do Velopack (deve vir primeiro).
+        VelopackApp.Build().Run();
+
         ApplicationConfiguration.Initialize();
 
         Process? angularProcess = null;
@@ -32,6 +40,9 @@ internal static class Program
         {
             angularProcess = StartAngularDevServer();
         }
+#else
+        // Em produção, verifica atualizações no GitHub em background.
+        _ = UpdateService.CheckAndApplyInBackgroundAsync();
 #endif
 
         using var form = new MainForm(AppUrl);

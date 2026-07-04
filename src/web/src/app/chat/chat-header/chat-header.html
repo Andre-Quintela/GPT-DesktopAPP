@@ -4,13 +4,24 @@
     <span>GPT-APP</span>
   </div>
 
-  <p-button
-    [icon]="mode() === 'dark' ? 'pi pi-sun' : 'pi pi-moon'"
-    severity="secondary"
-    [rounded]="true"
-    [text]="true"
-    [pTooltip]="mode() === 'dark' ? 'Tema claro' : 'Tema escuro'"
-    tooltipPosition="left"
-    (onClick)="toggleTheme()"
-  />
+  <div class="actions">
+    <p-button
+      icon="pi pi-cog"
+      severity="secondary"
+      [rounded]="true"
+      [text]="true"
+      pTooltip="Configurações"
+      tooltipPosition="bottom"
+      (onClick)="openSettings.emit()"
+    />
+    <p-button
+      [icon]="mode() === 'dark' ? 'pi pi-sun' : 'pi pi-moon'"
+      severity="secondary"
+      [rounded]="true"
+      [text]="true"
+      [pTooltip]="mode() === 'dark' ? 'Tema claro' : 'Tema escuro'"
+      tooltipPosition="left"
+      (onClick)="toggleTheme()"
+    />
+  </div>
 </header>
