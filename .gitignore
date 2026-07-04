@@ -1,0 +1,21 @@
+# .NET
+bin/
+obj/
+
+# Segredos / configs locais (contêm chaves de API)
+appsettings.Development.json
+secrets.json
+
+# Node / Angular
+node_modules/
+dist/
+.angular/
+
+# IDE
+.vs/
+.vscode/*
+!.vscode/extensions.json
+
+# OS
+Thumbs.db
+.DS_Store

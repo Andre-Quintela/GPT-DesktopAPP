@@ -1,0 +1,192 @@
+import { computed, Injectable, signal } from '@angular/core';
+import { ChatApiService } from './chat-api.service';
+import {
+  ChatImage,
+  ChatMessage,
+  ComposerSubmit,
+  Conversation,
+  newId
+} from '../models/chat.models';
+
+/**
+ * Estado das conversas (em memória) e orquestração do envio de mensagens.
+ * Usa signals para reatividade nos componentes.
+ */
+@Injectable({ providedIn: 'root' })
+export class ConversationStore {
+  private readonly _conversations = signal<Conversation[]>([]);
+  private readonly _activeId = signal<string | null>(null);
+  private readonly _sending = signal(false);
+
+  readonly conversations = this._conversations.asReadonly();
+  readonly sending = this._sending.asReadonly();
+
+  readonly active = computed(() => {
+    const id = this._activeId();
+    return this._conversations().find((c) => c.id === id) ?? null;
+  });
+
+  readonly messages = computed(() => this.active()?.messages ?? []);
+
+  constructor(private readonly api: ChatApiService) {
+    this.newConversation();
+  }
+
+  newConversation(): void {
+    const conversation: Conversation = {
+      id: newId(),
+      title: 'Nova conversa',
+      messages: [],
+      createdAt: Date.now()
+    };
+    this._conversations.update((list) => [conversation, ...list]);
+    this._activeId.set(conversation.id);
+  }
+
+  select(id: string): void {
+    this._activeId.set(id);
+  }
+
+  delete(id: string): void {
+    this._conversations.update((list) => list.filter((c) => c.id !== id));
+    if (this._activeId() === id) {
+      const first = this._conversations()[0];
+      if (first) {
+        this._activeId.set(first.id);
+      } else {
+        this.newConversation();
+      }
+    }
+  }
+
+  /** Ponto de entrada do composer: decide entre chat e geração de imagem. */
+  async submit(payload: ComposerSubmit): Promise<void> {
+    if (this._sending()) {
+      return;
+    }
+
+    const conversation = this.active();
+    if (!conversation) {
+      return;
+    }
+
+    const userMessage: ChatMessage = {
+      id: newId(),
+      role: 'user',
+      text: payload.text,
+      images: payload.images,
+      createdAt: Date.now()
+    };
+    this.appendMessage(conversation.id, userMessage);
+    this.maybeSetTitle(conversation.id, payload.text);
+
+    if (payload.mode === 'image') {
+      await this.runImage(conversation.id, payload.text);
+    } else {
+      await this.runChat(conversation.id);
+    }
+  }
+
+  // ---- Chat com streaming ----
+  private async runChat(conversationId: string): Promise<void> {
+    const assistant: ChatMessage = {
+      id: newId(),
+      role: 'assistant',
+      text: '',
+      images: [],
+      streaming: true,
+      createdAt: Date.now()
+    };
+    this.appendMessage(conversationId, assistant);
+    this._sending.set(true);
+
+    try {
+      const history = this.conversationById(conversationId)?.messages.filter(
+        (m) => m.id !== assistant.id
+      );
+      await this.api.streamChat(history ?? [], (token) => {
+        this.updateMessage(conversationId, assistant.id, (m) => ({
+          ...m,
+          text: m.text + token
+        }));
+      });
+    } catch (err) {
+      this.updateMessage(conversationId, assistant.id, (m) => ({
+        ...m,
+        text: m.text || `⚠️ Erro ao obter resposta: ${(err as Error).message}`
+      }));
+    } finally {
+      this.updateMessage(conversationId, assistant.id, (m) => ({ ...m, streaming: false }));
+      this._sending.set(false);
+    }
+  }
+
+  // ---- Geração de imagem ----
+  private async runImage(conversationId: string, prompt: string): Promise<void> {
+    const assistant: ChatMessage = {
+      id: newId(),
+      role: 'assistant',
+      text: '',
+      images: [],
+      streaming: true,
+      createdAt: Date.now()
+    };
+    this.appendMessage(conversationId, assistant);
+    this._sending.set(true);
+
+    try {
+      const b64 = await this.api.generateImage(prompt);
+      const image: ChatImage = { id: newId(), mediaType: 'image/png', base64: b64 };
+      this.updateMessage(conversationId, assistant.id, (m) => ({
+        ...m,
+        images: [image]
+      }));
+    } catch (err) {
+      this.updateMessage(conversationId, assistant.id, (m) => ({
+        ...m,
+        text: `⚠️ Erro ao gerar imagem: ${(err as Error).message}`
+      }));
+    } finally {
+      this.updateMessage(conversationId, assistant.id, (m) => ({ ...m, streaming: false }));
+      this._sending.set(false);
+    }
+  }
+
+  // ---- Helpers de estado ----
+  private conversationById(id: string): Conversation | undefined {
+    return this._conversations().find((c) => c.id === id);
+  }
+
+  private appendMessage(conversationId: string, message: ChatMessage): void {
+    this._conversations.update((list) =>
+      list.map((c) =>
+        c.id === conversationId ? { ...c, messages: [...c.messages, message] } : c
+      )
+    );
+  }
+
+  private updateMessage(
+    conversationId: string,
+    messageId: string,
+    updater: (m: ChatMessage) => ChatMessage
+  ): void {
+    this._conversations.update((list) =>
+      list.map((c) =>
+        c.id === conversationId
+          ? { ...c, messages: c.messages.map((m) => (m.id === messageId ? updater(m) : m)) }
+          : c
+      )
+    );
+  }
+
+  private maybeSetTitle(conversationId: string, text: string): void {
+    const conversation = this.conversationById(conversationId);
+    if (!conversation || conversation.messages.length > 1 || !text.trim()) {
+      return;
+    }
+    const title = text.trim().slice(0, 40) + (text.trim().length > 40 ? '…' : '');
+    this._conversations.update((list) =>
+      list.map((c) => (c.id === conversationId ? { ...c, title } : c))
+    );
+  }
+}

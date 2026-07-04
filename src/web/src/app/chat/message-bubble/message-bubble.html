@@ -1,0 +1,33 @@
+@let msg = message();
+
+<div class="bubble-row" [class.user]="isUser()">
+  <p-avatar
+    [icon]="isUser() ? 'pi pi-user' : 'pi pi-sparkles'"
+    shape="circle"
+    [styleClass]="isUser() ? 'avatar-user' : 'avatar-assistant'"
+  />
+
+  <div class="bubble">
+    @if (msg.images.length) {
+      <div class="images">
+        @for (img of msg.images; track img.id) {
+          <p-image [src]="imageSrc(img)" alt="imagem" width="256" [preview]="true" />
+        }
+      </div>
+    }
+
+    @if (msg.text) {
+      @if (isUser()) {
+        <div class="text user-text">{{ msg.text }}</div>
+      } @else {
+        <div class="text markdown" [innerHTML]="msg.text | markdown"></div>
+      }
+    }
+
+    @if (msg.streaming && !msg.text && !msg.images.length) {
+      <div class="typing"><span></span><span></span><span></span></div>
+    } @else if (msg.streaming) {
+      <span class="cursor">▍</span>
+    }
+  </div>
+</div>

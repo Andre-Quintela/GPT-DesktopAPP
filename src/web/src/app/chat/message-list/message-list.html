@@ -1,0 +1,14 @@
+<div #scroller class="scroller">
+  <div class="inner">
+    @if (!messages().length) {
+      <div class="empty">
+        <i class="pi pi-sparkles"></i>
+        <p>Comece uma conversa — envie uma mensagem, anexe uma imagem ou gere uma.</p>
+      </div>
+    }
+
+    @for (msg of messages(); track msg.id) {
+      <app-message-bubble [message]="msg" />
+    }
+  </div>
+</div>

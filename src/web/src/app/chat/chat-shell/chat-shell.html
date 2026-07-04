@@ -1,0 +1,9 @@
+<div class="shell">
+  <app-conversation-sidebar class="sidebar-slot" />
+
+  <main class="main">
+    <app-chat-header />
+    <app-message-list class="list-slot" [messages]="messages()" />
+    <app-message-composer [disabled]="sending()" (submit)="onSubmit($event)" />
+  </main>
+</div>

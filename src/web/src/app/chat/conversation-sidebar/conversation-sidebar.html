@@ -1,0 +1,29 @@
+<aside class="sidebar">
+  <p-button
+    label="Nova conversa"
+    icon="pi pi-plus"
+    styleClass="new-chat"
+    [outlined]="true"
+    (onClick)="newChat()"
+  />
+
+  <nav class="list">
+    @for (conv of conversations(); track conv.id) {
+      <button
+        type="button"
+        class="item"
+        [class.active]="conv.id === active()?.id"
+        (click)="select(conv.id)"
+      >
+        <i class="pi pi-comment"></i>
+        <span class="label">{{ conv.title }}</span>
+        <i
+          class="pi pi-trash delete"
+          pTooltip="Apagar"
+          tooltipPosition="right"
+          (click)="remove($event, conv.id)"
+        ></i>
+      </button>
+    }
+  </nav>
+</aside>

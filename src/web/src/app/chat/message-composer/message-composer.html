@@ -1,0 +1,64 @@
+<div class="composer">
+  @if (images().length) {
+    <div class="previews">
+      @for (img of images(); track img.id) {
+        <div class="preview">
+          <img [src]="previewSrc(img)" alt="anexo" />
+          <button type="button" class="remove" (click)="removeImage(img.id)">
+            <i class="pi pi-times"></i>
+          </button>
+        </div>
+      }
+    </div>
+  }
+
+  <div class="input-row">
+    <p-button
+      icon="pi pi-paperclip"
+      severity="secondary"
+      [text]="true"
+      pTooltip="Anexar imagem"
+      tooltipPosition="top"
+      (onClick)="openFilePicker()"
+    />
+
+    <textarea
+      pTextarea
+      class="field"
+      [rows]="1"
+      [autoResize]="true"
+      [ngModel]="text()"
+      (ngModelChange)="text.set($event)"
+      (keydown.enter)="onEnter($event)"
+      [placeholder]="imageMode() ? 'Descreva a imagem a gerar…' : 'Envie uma mensagem…'"
+    ></textarea>
+
+    <p-togglebutton
+      [ngModel]="imageMode()"
+      (ngModelChange)="imageMode.set($event)"
+      onIcon="pi pi-image"
+      offIcon="pi pi-image"
+      onLabel=""
+      offLabel=""
+      pTooltip="Gerar imagem"
+      tooltipPosition="top"
+    />
+
+    <p-button
+      icon="pi pi-send"
+      [disabled]="disabled()"
+      pTooltip="Enviar (Enter)"
+      tooltipPosition="top"
+      (onClick)="send()"
+    />
+  </div>
+
+  <input
+    #fileInput
+    type="file"
+    accept="image/*"
+    multiple
+    hidden
+    (change)="onFilesSelected($event)"
+  />
+</div>
