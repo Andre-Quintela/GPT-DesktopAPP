@@ -1,6 +1,9 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Desktop/Desktop.csproj" />
-    <Project Path="src/web/web.esproj" />
+    <Project Path="src/web/web.esproj">
+      <Build />
+      <Deploy />
+    </Project>
   </Folder>
 </Solution>
