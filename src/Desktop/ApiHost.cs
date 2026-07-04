@@ -2,9 +2,11 @@ using System.ClientModel;
 using System.Text;
 using System.Text.Json;
 using Azure.AI.OpenAI;
+using Desktop.Data;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -45,15 +47,33 @@ public static class ApiHost
 
         builder.Services.AddHttpClient();
 
+        // Persistência (SQLite em %APPDATA%/GPT-APP/gpt-app.db).
+        builder.Services.AddDbContext<ChatDbContext>(o => o.UseSqlite($"Data Source={GetDbPath()}"));
+
         builder.WebHost.UseUrls(BaseUrl);
 
         var app = builder.Build();
         app.UseCors(CorsPolicy);
 
+        // Garante o schema criado.
+        using (var scope = app.Services.CreateScope())
+        {
+            scope.ServiceProvider.GetRequiredService<ChatDbContext>().Database.EnsureCreated();
+        }
+
         app.MapPost("/api/chat/stream", ChatStreamAsync);
         app.MapPost("/api/images/generate", GenerateImageAsync);
+        app.MapConversationEndpoints();
 
         return app;
+    }
+
+    private static string GetDbPath()
+    {
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GPT-APP");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, "gpt-app.db");
     }
 
     // ---- Chat com streaming (SSE) ----

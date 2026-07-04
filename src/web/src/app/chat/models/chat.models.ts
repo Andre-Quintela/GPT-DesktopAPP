@@ -22,6 +22,8 @@ export interface Conversation {
   title: string;
   messages: ChatMessage[];
   createdAt: number;
+  /** true quando as mensagens já foram carregadas do backend. */
+  loaded?: boolean;
 }
 
 /** Modo de envio do composer. */

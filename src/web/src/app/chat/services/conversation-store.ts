@@ -1,5 +1,6 @@
 import { computed, Injectable, signal } from '@angular/core';
 import { ChatApiService } from './chat-api.service';
+import { ConversationApiService } from './conversation-api.service';
 import {
   ChatImage,
   ChatMessage,
@@ -9,8 +10,8 @@ import {
 } from '../models/chat.models';
 
 /**
- * Estado das conversas (em memória) e orquestração do envio de mensagens.
- * Usa signals para reatividade nos componentes.
+ * Estado das conversas e orquestração do envio de mensagens.
+ * O estado é reativo (signals) e persistido no backend (SQLite) de forma otimista.
  */
 @Injectable({ providedIn: 'root' })
 export class ConversationStore {
@@ -28,31 +29,88 @@ export class ConversationStore {
 
   readonly messages = computed(() => this.active()?.messages ?? []);
 
-  constructor(private readonly api: ChatApiService) {
-    this.newConversation();
+  constructor(
+    private readonly api: ChatApiService,
+    private readonly persistence: ConversationApiService
+  ) {
+    void this.init();
   }
 
+  // ---- Inicialização / carga ----
+  private async init(): Promise<void> {
+    try {
+      const list = await this.persistence.list();
+      if (list.length === 0) {
+        this.newConversation();
+        return;
+      }
+
+      this._conversations.set(
+        list.map((c) => ({
+          id: c.id,
+          title: c.title,
+          createdAt: c.createdAt,
+          messages: [],
+          loaded: false
+        }))
+      );
+      this._activeId.set(list[0].id);
+      await this.loadMessages(list[0].id);
+    } catch (err) {
+      console.error('Falha ao carregar conversas; iniciando vazio.', err);
+      this.newConversation();
+    }
+  }
+
+  private async loadMessages(id: string): Promise<void> {
+    const conversation = this.conversationById(id);
+    if (!conversation || conversation.loaded) {
+      return;
+    }
+    try {
+      const dto = await this.persistence.get(id);
+      const messages: ChatMessage[] = dto.messages.map((m) => ({
+        id: m.id,
+        role: m.role as ChatMessage['role'],
+        text: m.text,
+        images: m.images ?? [],
+        createdAt: m.createdAt
+      }));
+      this._conversations.update((list) =>
+        list.map((c) => (c.id === id ? { ...c, messages, loaded: true } : c))
+      );
+    } catch (err) {
+      console.error('Falha ao carregar mensagens da conversa.', err);
+    }
+  }
+
+  // ---- Comandos ----
   newConversation(): void {
     const conversation: Conversation = {
       id: newId(),
       title: 'Nova conversa',
       messages: [],
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      loaded: true
     };
     this._conversations.update((list) => [conversation, ...list]);
     this._activeId.set(conversation.id);
+    this.persist(this.persistence.create(conversation));
   }
 
   select(id: string): void {
     this._activeId.set(id);
+    void this.loadMessages(id);
   }
 
   delete(id: string): void {
+    this.persist(this.persistence.remove(id));
     this._conversations.update((list) => list.filter((c) => c.id !== id));
     if (this._activeId() === id) {
       const first = this._conversations()[0];
       if (first) {
         this._activeId.set(first.id);
+        void this.loadMessages(first.id);
       } else {
         this.newConversation();
       }
@@ -78,6 +136,7 @@ export class ConversationStore {
       createdAt: Date.now()
     };
     this.appendMessage(conversation.id, userMessage);
+    this.persist(this.persistence.addMessage(conversation.id, userMessage));
     this.maybeSetTitle(conversation.id, payload.text);
 
     if (payload.mode === 'image') {
@@ -116,8 +175,7 @@ export class ConversationStore {
         text: m.text || `⚠️ Erro ao obter resposta: ${(err as Error).message}`
       }));
     } finally {
-      this.updateMessage(conversationId, assistant.id, (m) => ({ ...m, streaming: false }));
-      this._sending.set(false);
+      this.finishAssistant(conversationId, assistant.id);
     }
   }
 
@@ -147,8 +205,20 @@ export class ConversationStore {
         text: `⚠️ Erro ao gerar imagem: ${(err as Error).message}`
       }));
     } finally {
-      this.updateMessage(conversationId, assistant.id, (m) => ({ ...m, streaming: false }));
-      this._sending.set(false);
+      this.finishAssistant(conversationId, assistant.id);
+    }
+  }
+
+  /** Encerra o streaming e persiste a mensagem final do assistente. */
+  private finishAssistant(conversationId: string, messageId: string): void {
+    this.updateMessage(conversationId, messageId, (m) => ({ ...m, streaming: false }));
+    this._sending.set(false);
+
+    const finalMessage = this.conversationById(conversationId)?.messages.find(
+      (m) => m.id === messageId
+    );
+    if (finalMessage) {
+      this.persist(this.persistence.addMessage(conversationId, finalMessage));
     }
   }
 
@@ -188,5 +258,11 @@ export class ConversationStore {
     this._conversations.update((list) =>
       list.map((c) => (c.id === conversationId ? { ...c, title } : c))
     );
+    this.persist(this.persistence.updateTitle(conversationId, title));
+  }
+
+  /** Persistência otimista: não bloqueia a UI; apenas registra erros. */
+  private persist(promise: Promise<void>): void {
+    promise.catch((err) => console.error('Falha ao persistir.', err));
   }
 }
